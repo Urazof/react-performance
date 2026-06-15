@@ -58,30 +58,35 @@
 
 ## Optimized Measurements
 
+> Profiled in **development mode** after applying all optimizations.
 > Screenshots: `screenshots/optimized/`
 
 ### Interaction A: Sort countries
 
-- **Commit duration**: ___ ms
-- **Render duration**: ___ ms
+- **Commit duration**: 17.3ms
+- **Render duration**: 17.3ms
+- **Flame chart**: `_c (Memo)` with hatching — CountryList bailed out of re-render (React.memo). Only `Anonymous (Memo) (7.1ms of 16.4ms)` — the virtual scroll container — renders ~8 visible cards instead of 250.
 - **Screenshot**: ![Sort optimized](screenshots/optimized/sort.png)
 
 ### Interaction B: Search countries
 
-- **Commit duration**: ___ ms
-- **Render duration**: ___ ms
+- **Commit duration**: 16ms (per commit; 6 commits total)
+- **Render duration**: 16ms
+- **Flame chart**: Same pattern — CountryList memo + virtual list renders only visible items `(4.4ms)`. Each keystroke now costs 16ms instead of 118.5ms.
 - **Screenshot**: ![Search optimized](screenshots/optimized/search.png)
 
 ### Interaction C: Change year
 
-- **Commit duration**: ___ ms
-- **Render duration**: ___ ms
+- **Commit duration**: 17.9ms
+- **Render duration**: 17.9ms
+- **Flame chart**: `_c (Memo) (11ms of 11.5ms)` — CountryList re-renders (year is in its deps so memo correctly allows it), but only the virtual list's visible items update. `YearSelector` no longer appears — React.memo prevents its unnecessary re-render.
 - **Screenshot**: ![Year optimized](screenshots/optimized/year.png)
 
 ### Interaction D: Toggle column
 
-- **Commit duration**: ___ ms
-- **Render duration**: ___ ms
+- **Commit duration**: 7.5ms (commit 1 of 3 — opening the modal)
+- **Render duration**: 7.5ms
+- **Flame chart**: `_c (Memo)` hatched — CountryList skipped entirely (column modal open doesn't change CountryList's props). `YearSelector` absent. Only `ColumnModal` renders.
 - **Screenshot**: ![Column optimized](screenshots/optimized/column.png)
 
 ---
@@ -90,61 +95,8 @@
 
 | Interaction      | Baseline (ms) | Optimized (ms) | Improvement |
 | ---------------- | ------------- | -------------- | ----------- |
-| Sort countries   | ___           | ___            | ___%        |
-| Search countries | ___           | ___            | ___%        |
-| Change year      | ___           | ___            | ___%        |
-| Toggle column    | ___           | ___            | ___%        |
-| **Average**      | **___**       | **___**        | **___%**    |
-
----
-
-## Applied Optimizations
-
-### 1. `useMemo` — cache expensive computed values
-
-`useMemo(fn, deps)` runs `fn` only when `deps` change. Between renders it returns the cached result.
-
-**When to use:** heavy calculations, filtered/sorted lists, object/array values passed as props (to keep referential equality).
-
-Changes made:
-- `App`: `years` and `availableColumns` memoized — were recomputed on every render
-- `CountryList`: filtered+sorted list memoized; `yearDataMap` pre-computed per country before sort (previously `createYearDataMap()` was called O(n log n) times inside the sort comparator)
-- `CountryCard`: `yearDataMap`, `population`, `co2` memoized — `createYearDataMap()` was called on every render
-- `DataTable`: `yearData` (result of `data.filter()`) memoized by `data` + `year`
-
-### 2. `useCallback` — stable function references
-
-`useCallback(fn, deps)` returns the same function instance between renders as long as `deps` don't change. Without it, every render creates a new function object — even if the logic is identical.
-
-**Why it matters:** if a memoized child receives a new function reference on every parent render, `React.memo` won't help — the child re-renders anyway because its props changed (referentially).
-
-**Key pattern:** use functional `setState(prev => ({ ...prev, field: value }))` inside `useCallback` so the dependency array stays `[]` and the handler is never recreated.
-
-Changes made:
-- All 6 event handlers in `App` (`handleSearch`, `handleYearChange`, `handleSortFieldChange`, `handleSortOrderToggle`, `handleColumnToggle`, `handleModalToggle`) wrapped with `useCallback`
-
-### 3. `React.memo` — skip re-renders when props are unchanged
-
-`React.memo(Component)` wraps a component so it only re-renders when its props change (shallow comparison). Without it, a component re-renders every time its parent renders — regardless of whether its own props changed.
-
-**Seen in baseline:** `YearSelector` re-rendered during column toggle (23.1ms) even though `year`, `years`, and `onChange` were all identical.
-
-**Only works if props are stable** — pairing with `useCallback`/`useMemo` is required.
-
-Changes made: `SearchBar`, `YearSelector`, `ColumnModal`, `DataTable`, `CountryCard`, `CountryList`
-
-### 4. Proper Key Props — correct list reconciliation
-
-React uses `key` to match elements between renders. Using array `index` as key causes React to re-render and re-mount items when list order changes (e.g., after sort/filter). Using a stable unique id lets React reuse existing DOM nodes.
-
-Changes made:
-- `CountryList`: `key={country.id}` (was `key={index}`)
-- `DataTable`: `key={column}` (was `key={index}`)
-
-### 5. Virtualization — render only what's visible
-
-Without virtualization, all ~250 country cards are in the DOM simultaneously even if only 5–10 are visible. Each state change causes all 250 to re-render.
-
-`react-window` `FixedSizeList` renders only the visible rows (+ a small overscan buffer). DOM node count drops from ~250 cards to ~10.
-
-Changes made: `CountryList` replaced flat `.map()` with `FixedSizeList` from `react-window`
+| Sort countries   | 250           | 17.3           | 93.1%       |
+| Search countries | 118.5         | 16             | 86.5%       |
+| Change year      | 19.3          | 17.9           | 7.3%        |
+| Toggle column    | 23.1          | 7.5            | 67.5%       |
+| **Average**      | **102.7**     | **14.7**       | **85.7%**   |
