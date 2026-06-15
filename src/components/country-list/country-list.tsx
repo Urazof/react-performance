@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Country } from '../../types';
 import { CountryCard } from '../country-card/country-card';
 import { getPopulationForYear, createYearDataMap } from '../../utils/data-transformers';
@@ -24,21 +25,30 @@ export const CountryList = ({
   sortField,
   sortOrder,
 }: CountryListProps) => {
-  const filteredCountries = countries
-    .filter((c) => {
+  const filteredCountries = useMemo(() => {
+    const filtered = countries.filter((c) => {
       const matchesSearch = c.id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRegion = !selectedRegion || c.data.some((d) => d.region === selectedRegion);
       return matchesSearch && matchesRegion;
-    })
-    .sort((a, b) => {
-      if (sortField === 'name') {
-        return sortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
-      } else {
-        const popA = getPopulationForYear(createYearDataMap(a.data), selectedYear) || 0;
-        const popB = getPopulationForYear(createYearDataMap(b.data), selectedYear) || 0;
-        return sortOrder === 'asc' ? popA - popB : popB - popA;
-      }
     });
+
+    if (sortField === 'name') {
+      return filtered.sort((a, b) =>
+        sortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id),
+      );
+    }
+
+    // Pre-compute population per country once — avoids calling createYearDataMap
+    // inside the sort comparator (which would be O(n log n) map allocations)
+    const withPop = filtered.map((c) => ({
+      country: c,
+      pop: getPopulationForYear(createYearDataMap(c.data), selectedYear) ?? 0,
+    }));
+
+    return withPop
+      .sort((a, b) => (sortOrder === 'asc' ? a.pop - b.pop : b.pop - a.pop))
+      .map((x) => x.country);
+  }, [countries, searchQuery, selectedRegion, selectedYear, sortField, sortOrder]);
 
   return (
     <div className={styles.countryList}>
