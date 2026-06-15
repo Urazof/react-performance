@@ -22,8 +22,8 @@ export const DataTable = memo(({ data, year, columns }: DataTableProps) => {
   return (
     <table className={styles.table}>
       <tbody>
-        {columns.map((column, index) => (
-          <tr key={index} className={styles.row}>
+        {columns.map((column) => (
+          <tr key={column} className={styles.row}>
             <td className={styles.labelCell}>{column.replace(/_/g, ' ').toUpperCase()}</td>
             <td className={styles.valueCell}>
               {formatNumber(record[column as keyof YearData] as number | undefined, {
