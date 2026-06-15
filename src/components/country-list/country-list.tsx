@@ -1,9 +1,13 @@
 import { memo, useMemo } from 'react';
+import { FixedSizeList, type ListChildComponentProps } from 'react-window';
 import type { Country } from '../../types';
 import { CountryCard } from '../country-card/country-card';
 import { getPopulationForYear, createYearDataMap } from '../../utils/data-transformers';
 
 import styles from './country-list.module.css';
+
+const ITEM_HEIGHT = 340;
+const LIST_HEIGHT = 620;
 
 type CountryListProps = {
   countries: Country[];
@@ -50,16 +54,36 @@ export const CountryList = memo(({
       .map((x) => x.country);
   }, [countries, searchQuery, selectedRegion, selectedYear, sortField, sortOrder]);
 
+  const itemData = useMemo(
+    () => ({ countries: filteredCountries, selectedYear, selectedColumns }),
+    [filteredCountries, selectedYear, selectedColumns],
+  );
+
   return (
-    <div className={styles.countryList}>
-      {filteredCountries.map((country) => (
-        <CountryCard
-          key={country.id}
-          country={country}
-          selectedYear={selectedYear}
-          selectedColumns={selectedColumns}
-        />
-      ))}
-    </div>
+    <FixedSizeList
+      height={LIST_HEIGHT}
+      itemCount={filteredCountries.length}
+      itemSize={ITEM_HEIGHT}
+      width="100%"
+      itemData={itemData}
+      className={styles.countryList}
+    >
+      {Row}
+    </FixedSizeList>
   );
 });
+
+type RowData = { countries: Country[]; selectedYear: number; selectedColumns: string[] };
+
+function Row({ index, style, data }: ListChildComponentProps<RowData>) {
+  const { countries, selectedYear, selectedColumns } = data;
+  return (
+    <div style={style}>
+      <CountryCard
+        country={countries[index]}
+        selectedYear={selectedYear}
+        selectedColumns={selectedColumns}
+      />
+    </div>
+  );
+}
