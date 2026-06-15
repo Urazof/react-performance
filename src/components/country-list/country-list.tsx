@@ -1,5 +1,4 @@
-import { memo, useMemo } from 'react';
-import { FixedSizeList, type ListChildComponentProps } from 'react-window';
+import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import type { Country } from '../../types';
 import { CountryCard } from '../country-card/country-card';
 import { getPopulationForYear, createYearDataMap } from '../../utils/data-transformers';
@@ -8,6 +7,7 @@ import styles from './country-list.module.css';
 
 const ITEM_HEIGHT = 340;
 const LIST_HEIGHT = 620;
+const OVERSCAN = 3;
 
 type CountryListProps = {
   countries: Country[];
@@ -29,6 +29,9 @@ export const CountryList = memo(({
   sortField,
   sortOrder,
 }: CountryListProps) => {
+  const [scrollTop, setScrollTop] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const filteredCountries = useMemo(() => {
     const filtered = countries.filter((c) => {
       const matchesSearch = c.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -54,36 +57,44 @@ export const CountryList = memo(({
       .map((x) => x.country);
   }, [countries, searchQuery, selectedRegion, selectedYear, sortField, sortOrder]);
 
-  const itemData = useMemo(
-    () => ({ countries: filteredCountries, selectedYear, selectedColumns }),
-    [filteredCountries, selectedYear, selectedColumns],
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
+
+  const totalHeight = filteredCountries.length * ITEM_HEIGHT;
+  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN);
+  const endIndex = Math.min(
+    filteredCountries.length - 1,
+    Math.ceil((scrollTop + LIST_HEIGHT) / ITEM_HEIGHT) + OVERSCAN,
   );
 
+  const visibleItems = filteredCountries.slice(startIndex, endIndex + 1);
+
   return (
-    <FixedSizeList
-      height={LIST_HEIGHT}
-      itemCount={filteredCountries.length}
-      itemSize={ITEM_HEIGHT}
-      width="100%"
-      itemData={itemData}
-      className={styles.countryList}
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      style={{ height: LIST_HEIGHT, overflowY: 'auto', position: 'relative' }}
     >
-      {Row}
-    </FixedSizeList>
-  );
-});
-
-type RowData = { countries: Country[]; selectedYear: number; selectedColumns: string[] };
-
-function Row({ index, style, data }: ListChildComponentProps<RowData>) {
-  const { countries, selectedYear, selectedColumns } = data;
-  return (
-    <div style={style}>
-      <CountryCard
-        country={countries[index]}
-        selectedYear={selectedYear}
-        selectedColumns={selectedColumns}
-      />
+      <div style={{ height: totalHeight, position: 'relative' }}>
+        {visibleItems.map((country, i) => (
+          <div
+            key={country.id}
+            style={{
+              position: 'absolute',
+              top: (startIndex + i) * ITEM_HEIGHT,
+              width: '100%',
+              height: ITEM_HEIGHT,
+            }}
+          >
+            <CountryCard
+              country={country}
+              selectedYear={selectedYear}
+              selectedColumns={selectedColumns}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
-}
+});
